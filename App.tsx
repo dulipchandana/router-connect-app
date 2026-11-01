@@ -1,7 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import * as Crypto from 'expo-crypto';
+import { encryptGuestPayload } from './guestWifiCrypto';
 import { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Platform,
   Pressable,
   ScrollView,
@@ -131,6 +134,91 @@ function findValueByKey(value: unknown, targetKey: string): unknown {
   return undefined;
 }
 
+function redactSensitiveValues(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitiveValues);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
+      const isSensitive = [
+        'password',
+        'psk',
+        'token',
+        'sid',
+        'csrftoken',
+      ].includes(normalizedKey);
+      return [
+        key,
+        isSensitive ? '[REDACTED]' : redactSensitiveValues(item),
+      ];
+    }),
+  );
+}
+
+function restoreLoginSessionValues(
+  value: unknown,
+  sid: string,
+  token: string | null,
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => restoreLoginSessionValues(item, sid, token));
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
+      if (normalizedKey === 'sid') {
+        return [key, sid];
+      }
+      if (normalizedKey === 'token' && token) {
+        return [key, token];
+      }
+      return [key, restoreLoginSessionValues(item, sid, token)];
+    }),
+  );
+}
+
+function getGuestWifiEnabled(payload: unknown): boolean {
+  const enabledValues: unknown[] = [];
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value === null || typeof value !== 'object') {
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    const ssid = Object.entries(record).find(
+      ([key]) => key.toLowerCase() === 'ssid',
+    )?.[1];
+    if (ssid === 'NOKIA-45AA_Guest') {
+      const enable = Object.entries(record).find(
+        ([key]) => key.toLowerCase() === 'enable',
+      )?.[1];
+      enabledValues.push(enable);
+    }
+
+    Object.values(record).forEach(visit);
+  };
+  visit(payload);
+
+  if (enabledValues.length === 0) {
+    throw new Error('Guest Wi-Fi status did not include SSID "NOKIA-45AA_Guest".');
+  }
+
+  return enabledValues.every((value) => value === 1 || value === '1');
+}
+
 function toRouterBase64Url(value: string): string {
   return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '.');
 }
@@ -140,6 +228,17 @@ export default function App() {
     useState<LoginResponseCache | null>(loadLoginResponseCache);
   const [sessionCheckResponse, setSessionCheckResponse] =
     useState<unknown | null>(null);
+  const [guestWifiResponse, setGuestWifiResponse] = useState<unknown | null>(
+    null,
+  );
+  const [guestWifiSettings, setGuestWifiSettings] = useState<unknown | null>(
+    null,
+  );
+  const [guestWifiStatusResponse, setGuestWifiStatusResponse] =
+    useState<unknown | null>(null);
+  const [guestWifiEncryptedRequest, setGuestWifiEncryptedRequest] =
+    useState<{ encrypted: string; ct: string; ck: string } | null>(null);
+  const [isSendingGuestWifi, setIsSendingGuestWifi] = useState(false);
   const [isOn, setIsOn] = useState(false);
   const [switchedOnAt, setSwitchedOnAt] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
@@ -159,7 +258,17 @@ export default function App() {
     sessionCache?.loginResponse ?? null,
   );
   const [loginServerResponse, setLoginServerResponse] = useState<string | null>(
-    sessionCache?.loginResponseText ?? null,
+    sessionCache
+      ? JSON.stringify(
+          restoreLoginSessionValues(
+            sessionCache.login,
+            sessionCache.sid,
+            sessionCache.token,
+          ),
+          null,
+          2,
+        )
+      : null,
   );
   const [encryptionKey, setEncryptionKey] = useState<string | null>(
     sessionCache?.encryptionKey ?? null,
@@ -168,29 +277,289 @@ export default function App() {
     sessionCache?.encryptionIv ?? null,
   );
   const [isRequestingNonce, setIsRequestingNonce] = useState(false);
+  const isButtonBusy = isRequestingNonce || isSendingGuestWifi;
+  const [buttonProgress] = useState(() => new Animated.Value(0));
   const [requestError, setRequestError] = useState<string | null>(null);
   const requestInProgressRef = useRef(false);
   const sessionCheckInProgressRef = useRef(false);
+  const guestWifiRequestInProgressRef = useRef(false);
   const startupLoginStartedRef = useRef(false);
 
-  const handleButtonPress = async (forceOn = false) => {
-    if (requestInProgressRef.current) {
+  const refreshGuestWifiStatus = async (
+    activeSession: LoginResponseCache,
+  ): Promise<boolean> => {
+    const response = await fetch('http://127.0.0.1:3001/guest-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sid: activeSession.sid }),
+    });
+    const responseText = await response.text();
+    let payload: unknown;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      throw new Error('The router returned invalid guest Wi-Fi status JSON.');
+    }
+    const redactedPayload = redactSensitiveValues(payload);
+    setGuestWifiStatusResponse(redactedPayload);
+    setGuestWifiSettings(redactedPayload);
+    if (!response.ok) {
+      const errorMessage = findValueByKey(payload, 'error');
+      throw new Error(
+        typeof errorMessage === 'string'
+          ? errorMessage
+          : `Guest Wi-Fi status request failed (HTTP ${response.status}).`,
+      );
+    }
+
+    const isGuestWifiEnabled = getGuestWifiEnabled(payload);
+    setIsOn(isGuestWifiEnabled);
+    setSwitchedOnAt(isGuestWifiEnabled ? Date.now() : null);
+    setDuration(0);
+    return isGuestWifiEnabled;
+  };
+
+  const sendGuestWifiRequest = async (
+    activeSession: LoginResponseCache,
+    refreshExpiredSession = true,
+    enableGuestWifi = true,
+  ) => {
+    if (Platform.OS !== 'web') {
+      setRequestError('The guest Wi-Fi request is supported in the web app only.');
       return;
+    }
+    if (guestWifiRequestInProgressRef.current) {
+      return;
+    }
+
+    guestWifiRequestInProgressRef.current = true;
+    setIsSendingGuestWifi(true);
+    setGuestWifiResponse(null);
+    setGuestWifiEncryptedRequest(null);
+    setRequestError(null);
+    let ownsSessionCheck = false;
+    let sessionExpired = false;
+    try {
+      if (sessionCheckInProgressRef.current) {
+        throw new Error('A router session check is already in progress. Try again shortly.');
+      }
+      sessionCheckInProgressRef.current = true;
+      ownsSessionCheck = true;
+
+      const sessionResponse = await fetch('http://127.0.0.1:3001/check-expire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sid: activeSession.sid }),
+      });
+      let sessionPayload: unknown;
+      try {
+        sessionPayload = await sessionResponse.json();
+      } catch {
+        throw new Error('The router returned an invalid session-check JSON response.');
+      }
+      setSessionCheckResponse(redactSensitiveValues(sessionPayload));
+      if (!sessionResponse.ok) {
+        const errorMessage = findValueByKey(sessionPayload, 'error');
+        throw new Error(
+          typeof errorMessage === 'string'
+            ? errorMessage
+            : `Session check failed (HTTP ${sessionResponse.status}).`,
+        );
+      }
+
+      const expired = findValueByKey(sessionPayload, 'expired');
+      if (expired !== 'no') {
+        if (refreshExpiredSession) {
+          sessionExpired = true;
+          setGuestWifiResponse({
+            status: 'session_expired',
+            message: 'Refreshing the router session before retrying.',
+          });
+        } else {
+          throw new Error('The refreshed router session is still expired.');
+        }
+      }
+
+      if (!sessionExpired) {
+        const expire = findValueByKey(sessionPayload, 'expire');
+        if (
+          typeof expire !== 'string' ||
+          !Number.isFinite(Number(expire)) ||
+          Number(expire) <= 0
+        ) {
+          throw new Error('The valid session response is missing a positive expire value.');
+        }
+
+        const settingsResponse = await fetch(
+          'http://127.0.0.1:3001/guest-config',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sid: activeSession.sid }),
+          },
+        );
+        const settingsText = await settingsResponse.text();
+        let settingsPayload: unknown;
+        try {
+          settingsPayload = JSON.parse(settingsText);
+        } catch {
+          throw new Error('The router returned invalid guest Wi-Fi settings JSON.');
+        }
+        setGuestWifiSettings(redactSensitiveValues(settingsPayload));
+        if (!settingsResponse.ok) {
+          const errorMessage = findValueByKey(settingsPayload, 'error');
+          throw new Error(
+            typeof errorMessage === 'string'
+              ? errorMessage
+              : `Guest Wi-Fi settings request failed (HTTP ${settingsResponse.status}).`,
+          );
+        }
+
+        if (!activeSession.publicKey) {
+          throw new Error('The cached router public key is missing; sign in again.');
+        }
+        if (!activeSession.token) {
+          throw new Error('The cached router CSRF token is missing; sign in again.');
+        }
+
+        const wlanList = findValueByKey(settingsPayload, 'wlan_list');
+        const guestList = findValueByKey(settingsPayload, 'guest_list');
+        if (!Array.isArray(wlanList) || !Array.isArray(guestList)) {
+          throw new Error('Guest Wi-Fi settings are missing wlan_list or guest_list.');
+        }
+
+        const targetGuestSsid = 'NOKIA-45AA_Guest';
+        const primaryGuest = guestList[0];
+        if (
+          primaryGuest === null ||
+          typeof primaryGuest !== 'object' ||
+          Array.isArray(primaryGuest) ||
+          !Number.isInteger(primaryGuest.MappedWlanIdx) ||
+          primaryGuest.MappedWlanIdx < 1
+        ) {
+          throw new Error('Guest Wi-Fi settings do not include a valid mapped WLAN index.');
+        }
+
+        const mappedWlan = wlanList[primaryGuest.MappedWlanIdx - 1];
+        if (
+          mappedWlan === null ||
+          typeof mappedWlan !== 'object' ||
+          Array.isArray(mappedWlan) ||
+          mappedWlan.SSID !== targetGuestSsid ||
+          typeof mappedWlan.PreSharedKey !== 'string'
+        ) {
+          throw new Error(
+            `The mapped WLAN is missing the "${targetGuestSsid}" SSID or its password.`,
+          );
+        }
+
+        const plaintextPayload = [
+          'act=ConfigWhwGuest',
+          'iso=',
+          'dura=',
+          'accessType=password',
+          `enable=${enableGuestWifi ? 1 : 0}`,
+          `wl_ssid=${encodeURIComponent(mappedWlan.SSID.trim())}`,
+          `wpaKey=${encodeURIComponent(mappedWlan.PreSharedKey.trim())}`,
+          'dual_band=0',
+          'ssid_num=',
+          'sync_value=false',
+          'wpa3_support=1',
+          `csrf_token=${activeSession.token}`,
+        ].join('&');
+        const encryptedRequest = await encryptGuestPayload(
+          activeSession.publicKey,
+          plaintextPayload,
+        );
+        setGuestWifiEncryptedRequest(encryptedRequest);
+
+        const wifiResponse = await fetch('http://127.0.0.1:3001/wifi-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sid: activeSession.sid,
+            enabled: enableGuestWifi,
+            ...encryptedRequest,
+          }),
+        });
+        const responseText = await wifiResponse.text();
+        let wifiPayload: unknown = responseText;
+        try {
+          wifiPayload = JSON.parse(responseText);
+        } catch {
+          // Keep the raw response when the router does not return JSON.
+        }
+        setGuestWifiResponse(redactSensitiveValues(wifiPayload));
+        if (!wifiResponse.ok) {
+          const errorMessage = findValueByKey(wifiPayload, 'error');
+          throw new Error(
+            typeof errorMessage === 'string'
+              ? errorMessage
+              : `Guest Wi-Fi update failed (HTTP ${wifiResponse.status}).`,
+          );
+        }
+
+        const routerResult = findValueByKey(wifiPayload, 'result');
+        const routerReason = findValueByKey(wifiPayload, 'reason');
+        if (
+          !(routerResult === 0 || routerResult === '0') ||
+          !(routerReason === 0 || routerReason === '0')
+        ) {
+          throw new Error('The router did not confirm the guest Wi-Fi configuration update.');
+        }
+
+        await refreshGuestWifiStatus(activeSession);
+      }
+    } catch (error) {
+      setRequestError(
+        error instanceof Error
+          ? error.message
+          : 'Could not send the guest Wi-Fi request.',
+      );
+    } finally {
+      if (ownsSessionCheck) {
+        sessionCheckInProgressRef.current = false;
+      }
+      guestWifiRequestInProgressRef.current = false;
+      setIsSendingGuestWifi(false);
+    }
+
+    if (sessionExpired) {
+      const refreshedSession = await handleButtonPressRef.current(true);
+      if (refreshedSession) {
+        await sendGuestWifiRequest(
+          refreshedSession,
+          false,
+          enableGuestWifi,
+        );
+      } else {
+        setGuestWifiResponse({
+          status: 'login_failed',
+          message: 'Could not refresh the expired router session.',
+        });
+      }
+    }
+  };
+
+  const handleButtonPress = async (
+    forceOn = false,
+  ): Promise<LoginResponseCache | null> => {
+    if (requestInProgressRef.current) {
+      return null;
     }
 
     const nextIsOn = forceOn || !isOn;
-    setIsOn(nextIsOn);
-    if (!forceOn) {
-      setSwitchedOnAt(nextIsOn ? Date.now() : null);
-    }
     setDuration(0);
-    if (!nextIsOn) {
-      setRequestError(null);
-      return;
-    }
     if (!forceOn && sessionCache) {
       setRequestError(null);
-      return;
+      await sendGuestWifiRequest(sessionCache, true, nextIsOn);
+      return null;
+    }
+    if (!nextIsOn) {
+      setIsOn(false);
+      setSwitchedOnAt(null);
+      setRequestError(null);
+      return null;
     }
 
     requestInProgressRef.current = true;
@@ -500,8 +869,9 @@ export default function App() {
       const tokenValue = findValueByKey(loginResponseJson, 'token');
       const token =
         typeof tokenValue === 'string' && tokenValue ? tokenValue : null;
-      setLoginServerResponse(JSON.stringify(loginResponseJson, null, 2));
-      setSessionCache({
+      const loginResponseText = JSON.stringify(loginResponseJson, null, 2);
+      setLoginServerResponse(loginResponseText);
+      const newSessionCache: LoginResponseCache = {
         nonce: payload,
         salt: saltPayload,
         response: responsePayload,
@@ -516,10 +886,17 @@ export default function App() {
         nonceValue: nonce,
         randomKeyHash: toRouterBase64Url(randomKeyDigest),
         loginResponse: calculatedResponse,
-        loginResponseText: JSON.stringify(loginResponseJson, null, 2),
+        loginResponseText,
         encryptionKey: generatedEncryptionKey,
         encryptionIv: generatedEncryptionIv,
-      });
+      };
+      setSessionCache(newSessionCache);
+      if (forceOn) {
+        await refreshGuestWifiStatus(newSessionCache);
+      } else {
+        await sendGuestWifiRequest(newSessionCache);
+      }
+      return newSessionCache;
     } catch (error) {
       setRequestError(
         Platform.OS === 'web' && error instanceof TypeError
@@ -528,23 +905,108 @@ export default function App() {
             ? error.message
             : 'Could not request the router nonce.',
       );
+      return null;
     } finally {
       requestInProgressRef.current = false;
       setIsRequestingNonce(false);
     }
   };
   const handleButtonPressRef = useRef(handleButtonPress);
-  handleButtonPressRef.current = handleButtonPress;
+  useEffect(() => {
+    handleButtonPressRef.current = handleButtonPress;
+  });
+
+  const validateCachedSession = async (cachedSession: LoginResponseCache | null) => {
+    if (Platform.OS !== 'web' || !cachedSession?.sid) {
+      return false;
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:3001/check-expire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sid: cachedSession.sid }),
+      });
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error('The router returned an invalid session-check JSON response.');
+      }
+
+      setSessionCheckResponse(redactSensitiveValues(payload));
+      if (!response.ok) {
+        const errorMessage = findValueByKey(payload, 'error');
+        throw new Error(
+          typeof errorMessage === 'string'
+            ? errorMessage
+            : `Session check failed (HTTP ${response.status}).`,
+        );
+      }
+
+      const expired = findValueByKey(payload, 'expired');
+      if (typeof expired !== 'string') {
+        throw new Error('The session-check response is missing expired.');
+      }
+
+      if (expired === 'no') {
+        const expire = findValueByKey(payload, 'expire');
+        const expireSeconds = Number(expire);
+        if (
+          typeof expire !== 'string' ||
+          !Number.isFinite(expireSeconds) ||
+          expireSeconds <= 0
+        ) {
+          throw new Error(
+            'The valid session response is missing a positive expire value.',
+          );
+        }
+
+        setRequestError(null);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      setRequestError(
+        error instanceof Error
+          ? error.message
+          : 'Could not check the router session.',
+      );
+      return false;
+    }
+  };
 
   useEffect(() => {
-    if (
-      Platform.OS === 'web' &&
-      sessionCache === null &&
-      !startupLoginStartedRef.current
-    ) {
-      startupLoginStartedRef.current = true;
-      void handleButtonPressRef.current(true);
+    if (Platform.OS !== 'web' || startupLoginStartedRef.current) {
+      return;
     }
+
+    startupLoginStartedRef.current = true;
+
+    if (sessionCache?.sid) {
+      void (async () => {
+        const isSessionValid = await validateCachedSession(sessionCache);
+        if (isSessionValid) {
+          try {
+            await refreshGuestWifiStatus(sessionCache);
+          } catch (error) {
+            setIsOn(false);
+            setRequestError(
+              error instanceof Error
+                ? error.message
+                : 'Could not load guest Wi-Fi status.',
+            );
+          }
+        } else {
+          await handleButtonPressRef.current(true);
+        }
+      })();
+      return;
+    }
+
+    void handleButtonPressRef.current(true);
   }, [sessionCache]);
 
   useEffect(() => {
@@ -572,7 +1034,8 @@ export default function App() {
     const checkSession = async () => {
       if (
         requestInProgressRef.current ||
-        sessionCheckInProgressRef.current
+        sessionCheckInProgressRef.current ||
+        guestWifiRequestInProgressRef.current
       ) {
         scheduleCheck(1000, () => void checkSession());
         return;
@@ -597,7 +1060,7 @@ export default function App() {
         } catch {
           throw new Error('The router returned an invalid session-check JSON response.');
         }
-        setSessionCheckResponse(payload);
+        setSessionCheckResponse(redactSensitiveValues(payload));
         if (!response.ok) {
           const errorMessage = findValueByKey(payload, 'error');
           throw new Error(
@@ -652,6 +1115,25 @@ export default function App() {
   }, [sessionCache?.sid]);
 
   useEffect(() => {
+    if (!isButtonBusy) {
+      buttonProgress.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.timing(buttonProgress, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }),
+    );
+    animation.start();
+
+    return () => animation.stop();
+  }, [isButtonBusy, buttonProgress]);
+
+  useEffect(() => {
     if (!isOn || switchedOnAt === null) {
       return;
     }
@@ -670,6 +1152,10 @@ export default function App() {
   ]
     .map((part) => String(part).padStart(2, '0'))
     .join(':');
+  const buttonProgressRotation = buttonProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
     <ScrollView
@@ -682,28 +1168,40 @@ export default function App() {
           {isOn ? 'Disable' : 'Enable'} NOKIA-45AA_Guest wifi
         </Text>
         <Text style={styles.description}>
-          This switch is a visual status only; it does not change your router
-          settings.
+          Switching ON enables the NOKIA-45AA_Guest SSID on its matching Wi-Fi
+          bands. Switching OFF disables those matching guest network entries.
         </Text>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Turn ${isOn ? 'off' : 'on'}`}
-          accessibilityState={{ checked: isOn }}
-          disabled={isRequestingNonce}
-          onPress={() => void handleButtonPress()}
-          style={({ pressed }) => [
-            styles.button,
-            isOn && styles.buttonOn,
-            pressed && styles.buttonPressed,
-          ]}
-        >
-          <View style={[styles.buttonInner, isOn && styles.buttonInnerOn]}>
-            <Text style={[styles.buttonLabel, isOn && styles.buttonLabelOn]}>
-              {isOn ? 'ON' : 'OFF'}
-            </Text>
-          </View>
-        </Pressable>
+        <View style={styles.buttonWrap}>
+          {isButtonBusy && (
+            <Animated.View
+              accessible={false}
+              pointerEvents="none"
+              style={[
+                styles.progressRing,
+                { transform: [{ rotate: buttonProgressRotation }] },
+              ]}
+            />
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Turn ${isOn ? 'off' : 'on'}`}
+            accessibilityState={{ checked: isOn, busy: isButtonBusy }}
+            disabled={isButtonBusy}
+            onPress={() => void handleButtonPress()}
+            style={({ pressed }) => [
+              styles.button,
+              isOn && styles.buttonOn,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <View style={[styles.buttonInner, isOn && styles.buttonInnerOn]}>
+              <Text style={[styles.buttonLabel, isOn && styles.buttonLabelOn]}>
+                {isOn ? 'ON' : 'OFF'}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
 
         <View style={styles.status}>
           <View style={[styles.statusDot, isOn && styles.statusDotOn]} />
@@ -798,6 +1296,42 @@ export default function App() {
                 : JSON.stringify(sessionCheckResponse, null, 2)}
             </Text>
           </View>
+          <View style={styles.hashRow}>
+            <Text style={styles.detailLabel}>Guest Wi-Fi settings JSON (PreSharedKey visible)</Text>
+            <Text selectable style={styles.responseValue}>
+              {isSendingGuestWifi
+                ? 'Checking session and fetching current settings...'
+                : guestWifiSettings === null
+                  ? 'No guest Wi-Fi settings fetched yet.'
+                  : JSON.stringify(guestWifiSettings, null, 2)}
+            </Text>
+          </View>
+          <View style={styles.hashRow}>
+            <Text style={styles.detailLabel}>Guest Wi-Fi status JSON (PreSharedKey visible)</Text>
+            <Text selectable style={styles.responseValue}>
+                  {guestWifiStatusResponse === null
+                    ? 'Guest Wi-Fi status has not been checked yet.'
+                    : JSON.stringify(guestWifiStatusResponse, null, 2)}
+            </Text>
+          </View>
+          <View style={styles.hashRow}>
+            <Text style={styles.detailLabel}>Generated encrypted request</Text>
+            <Text selectable style={styles.responseValue}>
+              {guestWifiEncryptedRequest === null
+                ? 'No request generated yet.'
+                : JSON.stringify(guestWifiEncryptedRequest, null, 2)}
+            </Text>
+          </View>
+          <View style={styles.hashRow}>
+            <Text style={styles.detailLabel}>Guest Wi-Fi request response</Text>
+            <Text selectable style={styles.responseValue}>
+              {guestWifiResponse === null
+                ? 'No guest Wi-Fi request sent yet.'
+                : typeof guestWifiResponse === 'string'
+                  ? guestWifiResponse
+                  : JSON.stringify(guestWifiResponse, null, 2)}
+            </Text>
+          </View>
           {requestError !== null && (
             <Text accessibilityRole="alert" style={styles.errorText}>
               {requestError}
@@ -838,6 +1372,22 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 30,
     textAlign: 'center',
+  },
+  buttonWrap: {
+    width: 248,
+    height: 248,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressRing: {
+    position: 'absolute',
+    width: 244,
+    height: 244,
+    borderRadius: 122,
+    borderWidth: 4,
+    borderColor: '#30394C',
+    borderTopColor: '#78F0C0',
+    borderRightColor: '#78F0C0',
   },
   button: {
     width: 224,

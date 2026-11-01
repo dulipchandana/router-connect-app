@@ -5,6 +5,7 @@ const wifiLoginCollection = require('./wifi-login.json');
 const saltCollection = require('./wifi-log-salt.json');
 const postmanHashCollection = require('./postman-hash.json');
 const checkExpireCollection = require('./chek-cgi.json');
+const wifiStatusCollection = require('./postman-wifi-status.json');
 const credentials = require('./router-credentials.local.json');
 
 const nonceRequest = wifiLoginCollection.item[0]?.request;
@@ -13,6 +14,8 @@ const loginRequest = postmanHashCollection.item.find(
   (item) => item.name === 'login_web_app.cgi',
 )?.request;
 const checkExpireRequest = checkExpireCollection.item[0]?.request;
+const wifiOnRequest = require('./wifi-on.json').item[0]?.request;
+const guestWifiStatusRequest = wifiStatusCollection.item[0]?.request;
 const usernameField = nonceRequest?.body.urlencoded.find(
   (field) => field.key === 'userName',
 );
@@ -22,7 +25,11 @@ if (
   !saltRequest?.url.raw ||
   !loginRequest?.url.raw ||
   !checkExpireRequest?.url.raw ||
+  !wifiOnRequest?.url.raw ||
+  !guestWifiStatusRequest?.url?.raw ||
+  guestWifiStatusRequest.method !== 'GET' ||
   !loginRequest.body?.urlencoded ||
+  !wifiOnRequest.body?.urlencoded ||
   !usernameField?.value
 ) {
   throw new Error('Login request configuration is missing a required URL or username.');
@@ -219,7 +226,16 @@ const server = http.createServer((request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     sendJson(response, 200, {
       status: 'ok',
-      routes: ['nonce', 'salt', 'response', 'login', 'check-expire'],
+      routes: [
+        'nonce',
+        'salt',
+        'response',
+        'login',
+        'check-expire',
+        'guest-config',
+        'wifi-config',
+        'wifi-on',
+      ],
       responseFields: ['response', 'enckey', 'enciv'],
     });
     return;
@@ -246,9 +262,16 @@ const server = http.createServer((request, response) => {
 
   if (
     request.method !== 'POST' ||
-    !['/nonce', '/salt', '/response', '/login', '/check-expire'].includes(
-      request.url,
-    )
+    ![
+      '/nonce',
+      '/salt',
+      '/response',
+      '/login',
+      '/check-expire',
+      '/guest-config',
+      '/wifi-config',
+      '/wifi-on',
+    ].includes(request.url)
   ) {
     sendJson(response, 404, { error: 'Not found.' });
     return;
@@ -273,6 +296,92 @@ const server = http.createServer((request, response) => {
     }
 
     const body = Buffer.concat(chunks).toString('utf8');
+    if (request.url === '/guest-config') {
+      let values;
+      try {
+        values = JSON.parse(body);
+      } catch {
+        sendJson(response, 400, { error: 'Invalid guest Wi-Fi status payload.' });
+        return;
+      }
+
+      if (
+        !values ||
+        typeof values.sid !== 'string' ||
+        !/^[A-Za-z0-9._~-]{1,256}$/.test(values.sid)
+      ) {
+        sendJson(response, 400, { error: 'A valid session ID is required.' });
+        return;
+      }
+
+      forwardRequest(
+        guestWifiStatusRequest,
+        '',
+        origin,
+        response,
+        cookieHeaderWithSessionId(guestWifiStatusRequest, values.sid),
+      );
+      return;
+    }
+
+    if (request.url === '/wifi-on' || request.url === '/wifi-config') {
+      let values;
+      try {
+        values = JSON.parse(body);
+      } catch {
+        sendJson(response, 400, { error: 'Invalid guest Wi-Fi request payload.' });
+        return;
+      }
+
+      if (
+        !values ||
+        typeof values.sid !== 'string' ||
+        !/^[A-Za-z0-9._~-]{1,256}$/.test(values.sid) ||
+        (request.url === '/wifi-config' && typeof values.enabled !== 'boolean')
+      ) {
+        sendJson(response, 400, {
+          error: 'A valid session ID and enabled state are required.',
+        });
+        return;
+      }
+
+      const wifiFormFields = wifiOnRequest.body.urlencoded.map((field) => [
+        field.key,
+        field.value,
+      ]);
+      const requiredFields = ['encrypted', 'ct', 'ck'];
+      const actualFields = wifiFormFields.map(([key]) => key.toLowerCase());
+      if (
+        wifiOnRequest.method !== 'POST' ||
+        requiredFields.some((field) => !actualFields.includes(field)) ||
+        values.encrypted !== '1' ||
+        typeof values.ct !== 'string' ||
+        !/^[A-Za-z0-9_-]+$/.test(values.ct) ||
+        typeof values.ck !== 'string' ||
+        !/^[A-Za-z0-9._-]+$/.test(values.ck)
+      ) {
+        sendJson(response, 500, {
+          error: 'Guest Wi-Fi request must include valid encrypted, ct, and ck values.',
+        });
+        return;
+      }
+
+      const wifiFormBody = new URLSearchParams(
+        wifiOnRequest.body.urlencoded.map((field) => [
+          field.key,
+          values[field.key.toLowerCase()],
+        ]),
+      ).toString();
+      forwardRequest(
+        wifiOnRequest,
+        wifiFormBody,
+        origin,
+        response,
+        cookieHeaderWithSessionId(wifiOnRequest, values.sid),
+      );
+      return;
+    }
+
     if (request.url === '/check-expire') {
       let values;
       try {
@@ -355,10 +464,6 @@ const server = http.createServer((request, response) => {
         return;
       }
       const loginFormBody = new URLSearchParams(loginFormFields).toString();
-      console.log(
-        '[router-proxy] login_web_app.cgi form payload:',
-        loginFormBody,
-      );
       forwardRequest(loginRequest, loginFormBody, origin, response);
       return;
     }

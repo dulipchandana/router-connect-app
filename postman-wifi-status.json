@@ -1,0 +1,66 @@
+{
+  "info": {
+    "name": "Router WLAN Guest Status",
+    "description": "Generated from the supplied curl command. The session cookie is parameterized as {{sid}}; set it in the collection variables before sending.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get WLAN Guest Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid={{sid}}"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/wlan_config_guest_status_web_app.cgi",
+          "protocol": "http",
+          "host": [
+            "192",
+            "168",
+            "1",
+            "1"
+          ],
+          "path": [
+            "wlan_config_guest_status_web_app.cgi"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "sid",
+      "value": "REPLACE_WITH_ROUTER_SESSION_ID",
+      "type": "string"
+    }
+  ]
+}
