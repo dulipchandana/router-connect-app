@@ -1,21 +1,30 @@
 import { StatusBar } from 'expo-status-bar';
 import * as Crypto from 'expo-crypto';
-import { encryptGuestPayload } from './guestWifiCrypto';
+import * as SecureStore from 'expo-secure-store';
+import {
+  createLoginCryptoValues,
+  encryptGuestPayload,
+} from './guestWifiCrypto';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import wifiLoginCollection from './wifi-login.json';
 import wifiSaltCollection from './wifi-log-salt.json';
 import postmanHashCollection from './postman-hash.json';
 import checkExpireCollection from './chek-cgi.json';
+import guestWifiStatusCollection from './postman-wifi-status.json';
+import wifiOnCollection from './wifi-on.json';
+import { getProxyErrorMessage, getProxyUrl } from './routerProxy';
 
 const nonceRequest = wifiLoginCollection.item[0]?.request;
 const saltRequest = wifiSaltCollection.item[0]?.request;
@@ -23,10 +32,13 @@ const loginRequest = postmanHashCollection.item.find(
   (item) => item.name === 'login_web_app.cgi',
 )?.request;
 const checkExpireRequest = checkExpireCollection.item[0]?.request;
+const guestWifiStatusRequest = guestWifiStatusCollection.item[0]?.request;
+const wifiOnRequest = wifiOnCollection.item[0]?.request;
 const usernameField = nonceRequest?.body.urlencoded.find(
   (field) => field.key === 'userName',
 );
 const loginCacheStorageKey = 'router-connect-app.login-cache';
+const routerPasswordStorageKey = 'router-connect-app.router-password';
 
 interface LoginResponseCache {
   nonce: unknown;
@@ -134,58 +146,6 @@ function findValueByKey(value: unknown, targetKey: string): unknown {
   return undefined;
 }
 
-function redactSensitiveValues(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactSensitiveValues);
-  }
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => {
-      const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
-      const isSensitive = [
-        'password',
-        'psk',
-        'token',
-        'sid',
-        'csrftoken',
-      ].includes(normalizedKey);
-      return [
-        key,
-        isSensitive ? '[REDACTED]' : redactSensitiveValues(item),
-      ];
-    }),
-  );
-}
-
-function restoreLoginSessionValues(
-  value: unknown,
-  sid: string,
-  token: string | null,
-): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => restoreLoginSessionValues(item, sid, token));
-  }
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => {
-      const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
-      if (normalizedKey === 'sid') {
-        return [key, sid];
-      }
-      if (normalizedKey === 'token' && token) {
-        return [key, token];
-      }
-      return [key, restoreLoginSessionValues(item, sid, token)];
-    }),
-  );
-}
-
 function getGuestWifiEnabled(payload: unknown): boolean {
   const enabledValues: unknown[] = [];
   const visit = (value: unknown) => {
@@ -223,59 +183,66 @@ function toRouterBase64Url(value: string): string {
   return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '.');
 }
 
+function createRouterHeaders(
+  configuredHeaders: { key: string; value: string }[] | undefined,
+  sid?: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  let configuredCookie = '';
+
+  for (const header of configuredHeaders ?? []) {
+    const key = header.key.toLowerCase();
+    if (key === 'connection') {
+      continue;
+    }
+    if (key === 'cookie') {
+      configuredCookie = header.value;
+      continue;
+    }
+    headers[header.key] = header.value;
+  }
+
+  if (sid !== undefined) {
+    let replacedSid = false;
+    const cookies = configuredCookie
+      .split(';')
+      .map((cookie) => cookie.trim())
+      .filter(Boolean)
+      .map((cookie) => {
+        const separatorIndex = cookie.indexOf('=');
+        if (
+          separatorIndex > 0 &&
+          cookie.slice(0, separatorIndex).trim().toLowerCase() === 'sid'
+        ) {
+          replacedSid = true;
+          return `sid=${sid}`;
+        }
+        return cookie;
+      });
+
+    if (!replacedSid) {
+      cookies.push(`sid=${sid}`);
+    }
+    headers.Cookie = cookies.join('; ');
+  }
+
+  return headers;
+}
 export default function App() {
   const [sessionCache, setSessionCache] =
     useState<LoginResponseCache | null>(loadLoginResponseCache);
-  const [sessionCheckResponse, setSessionCheckResponse] =
-    useState<unknown | null>(null);
-  const [guestWifiResponse, setGuestWifiResponse] = useState<unknown | null>(
-    null,
+  const [routerPassword, setRouterPassword] = useState<string | null>(null);
+  const [routerPasswordInput, setRouterPasswordInput] = useState('');
+  const [isRouterPasswordLoaded, setIsRouterPasswordLoaded] = useState(
+    Platform.OS === 'web',
   );
-  const [guestWifiSettings, setGuestWifiSettings] = useState<unknown | null>(
-    null,
-  );
-  const [guestWifiStatusResponse, setGuestWifiStatusResponse] =
-    useState<unknown | null>(null);
-  const [guestWifiEncryptedRequest, setGuestWifiEncryptedRequest] =
-    useState<{ encrypted: string; ct: string; ck: string } | null>(null);
   const [isSendingGuestWifi, setIsSendingGuestWifi] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOn, setIsOn] = useState(false);
   const [switchedOnAt, setSwitchedOnAt] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
-  const [userHash, setUserHash] = useState<string | null>(
-    sessionCache?.userHash ?? null,
-  );
-  const [nonceValue, setNonceValue] = useState<string | null>(
-    sessionCache?.nonceValue ?? null,
-  );
-  const [publicKey, setPublicKey] = useState<string | null>(
-    sessionCache?.publicKey ?? null,
-  );
-  const [randomKeyHash, setRandomKeyHash] = useState<string | null>(
-    sessionCache?.randomKeyHash ?? null,
-  );
-  const [loginResponse, setLoginResponse] = useState<string | null>(
-    sessionCache?.loginResponse ?? null,
-  );
-  const [loginServerResponse, setLoginServerResponse] = useState<string | null>(
-    sessionCache
-      ? JSON.stringify(
-          restoreLoginSessionValues(
-            sessionCache.login,
-            sessionCache.sid,
-            sessionCache.token,
-          ),
-          null,
-          2,
-        )
-      : null,
-  );
-  const [encryptionKey, setEncryptionKey] = useState<string | null>(
-    sessionCache?.encryptionKey ?? null,
-  );
-  const [encryptionIv, setEncryptionIv] = useState<string | null>(
-    sessionCache?.encryptionIv ?? null,
-  );
+  const pullStartY = useRef<number | null>(null);
+  const scrollOffsetY = useRef(0);
   const [isRequestingNonce, setIsRequestingNonce] = useState(false);
   const isButtonBusy = isRequestingNonce || isSendingGuestWifi;
   const [buttonProgress] = useState(() => new Animated.Value(0));
@@ -285,14 +252,77 @@ export default function App() {
   const guestWifiRequestInProgressRef = useRef(false);
   const startupLoginStartedRef = useRef(false);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return;
+    }
+
+    const rootOverscrollBehavior = document.documentElement.style.overscrollBehaviorY;
+    const bodyOverscrollBehavior = document.body.style.overscrollBehaviorY;
+    document.documentElement.style.overscrollBehaviorY = 'contain';
+    document.body.style.overscrollBehaviorY = 'contain';
+
+    return () => {
+      document.documentElement.style.overscrollBehaviorY =
+        rootOverscrollBehavior;
+      document.body.style.overscrollBehaviorY = bodyOverscrollBehavior;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+
+    let active = true;
+    void SecureStore.getItemAsync(routerPasswordStorageKey)
+      .then((password) => {
+        if (active) {
+          setRouterPassword(password);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setRequestError(
+            error instanceof Error
+              ? `Could not read the saved router password: ${error.message}`
+              : 'Could not read the saved router password.',
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsRouterPasswordLoaded(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const refreshGuestWifiStatus = async (
     activeSession: LoginResponseCache,
   ): Promise<boolean> => {
-    const response = await fetch('http://127.0.0.1:3001/guest-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sid: activeSession.sid }),
-    });
+    if (!guestWifiStatusRequest?.url.raw) {
+      throw new Error('Guest Wi-Fi status request URL is missing.');
+    }
+
+    const response =
+      Platform.OS === 'web'
+        ? await fetch(getProxyUrl('/guest-config'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sid: activeSession.sid }),
+          })
+        : await fetch(guestWifiStatusRequest.url.raw, {
+            method: guestWifiStatusRequest.method,
+            headers: createRouterHeaders(
+              guestWifiStatusRequest.header,
+              activeSession.sid,
+            ),
+            credentials: 'include',
+          });
     const responseText = await response.text();
     let payload: unknown;
     try {
@@ -300,9 +330,6 @@ export default function App() {
     } catch {
       throw new Error('The router returned invalid guest Wi-Fi status JSON.');
     }
-    const redactedPayload = redactSensitiveValues(payload);
-    setGuestWifiStatusResponse(redactedPayload);
-    setGuestWifiSettings(redactedPayload);
     if (!response.ok) {
       const errorMessage = findValueByKey(payload, 'error');
       throw new Error(
@@ -314,8 +341,12 @@ export default function App() {
 
     const isGuestWifiEnabled = getGuestWifiEnabled(payload);
     setIsOn(isGuestWifiEnabled);
-    setSwitchedOnAt(isGuestWifiEnabled ? Date.now() : null);
-    setDuration(0);
+    setSwitchedOnAt((previousStartTime) =>
+      isGuestWifiEnabled ? (previousStartTime ?? Date.now()) : null,
+    );
+    if (!isGuestWifiEnabled) {
+      setDuration(0);
+    }
     return isGuestWifiEnabled;
   };
 
@@ -324,18 +355,12 @@ export default function App() {
     refreshExpiredSession = true,
     enableGuestWifi = true,
   ) => {
-    if (Platform.OS !== 'web') {
-      setRequestError('The guest Wi-Fi request is supported in the web app only.');
-      return;
-    }
     if (guestWifiRequestInProgressRef.current) {
       return;
     }
 
     guestWifiRequestInProgressRef.current = true;
     setIsSendingGuestWifi(true);
-    setGuestWifiResponse(null);
-    setGuestWifiEncryptedRequest(null);
     setRequestError(null);
     let ownsSessionCheck = false;
     let sessionExpired = false;
@@ -346,18 +371,30 @@ export default function App() {
       sessionCheckInProgressRef.current = true;
       ownsSessionCheck = true;
 
-      const sessionResponse = await fetch('http://127.0.0.1:3001/check-expire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sid: activeSession.sid }),
-      });
+      if (!checkExpireRequest?.url.raw) {
+        throw new Error('Session-check request URL is missing.');
+      }
+      const sessionResponse =
+        Platform.OS === 'web'
+          ? await fetch(getProxyUrl('/check-expire'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sid: activeSession.sid }),
+            })
+          : await fetch(checkExpireRequest.url.raw, {
+              method: checkExpireRequest.method,
+              headers: createRouterHeaders(
+                checkExpireRequest.header,
+                activeSession.sid,
+              ),
+              credentials: 'include',
+            });
       let sessionPayload: unknown;
       try {
         sessionPayload = await sessionResponse.json();
       } catch {
         throw new Error('The router returned an invalid session-check JSON response.');
       }
-      setSessionCheckResponse(redactSensitiveValues(sessionPayload));
       if (!sessionResponse.ok) {
         const errorMessage = findValueByKey(sessionPayload, 'error');
         throw new Error(
@@ -371,10 +408,6 @@ export default function App() {
       if (expired !== 'no') {
         if (refreshExpiredSession) {
           sessionExpired = true;
-          setGuestWifiResponse({
-            status: 'session_expired',
-            message: 'Refreshing the router session before retrying.',
-          });
         } else {
           throw new Error('The refreshed router session is still expired.');
         }
@@ -390,14 +423,24 @@ export default function App() {
           throw new Error('The valid session response is missing a positive expire value.');
         }
 
-        const settingsResponse = await fetch(
-          'http://127.0.0.1:3001/guest-config',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sid: activeSession.sid }),
-          },
-        );
+        if (!guestWifiStatusRequest?.url.raw) {
+          throw new Error('Guest Wi-Fi status request URL is missing.');
+        }
+        const settingsResponse =
+          Platform.OS === 'web'
+            ? await fetch(getProxyUrl('/guest-config'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sid: activeSession.sid }),
+              })
+            : await fetch(guestWifiStatusRequest.url.raw, {
+                method: guestWifiStatusRequest.method,
+                headers: createRouterHeaders(
+                  guestWifiStatusRequest.header,
+                  activeSession.sid,
+                ),
+                credentials: 'include',
+              });
         const settingsText = await settingsResponse.text();
         let settingsPayload: unknown;
         try {
@@ -405,7 +448,6 @@ export default function App() {
         } catch {
           throw new Error('The router returned invalid guest Wi-Fi settings JSON.');
         }
-        setGuestWifiSettings(redactSensitiveValues(settingsPayload));
         if (!settingsResponse.ok) {
           const errorMessage = findValueByKey(settingsPayload, 'error');
           throw new Error(
@@ -471,17 +513,48 @@ export default function App() {
           activeSession.publicKey,
           plaintextPayload,
         );
-        setGuestWifiEncryptedRequest(encryptedRequest);
-
-        const wifiResponse = await fetch('http://127.0.0.1:3001/wifi-config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sid: activeSession.sid,
-            enabled: enableGuestWifi,
-            ...encryptedRequest,
+        if (!wifiOnRequest?.url.raw || !wifiOnRequest.body?.urlencoded) {
+          throw new Error('Guest Wi-Fi configuration request is missing its URL or fields.');
+        }
+        const encryptedValues: Record<string, string> = {
+          encrypted: encryptedRequest.encrypted,
+          ct: encryptedRequest.ct,
+          ck: encryptedRequest.ck,
+        };
+        const wifiFormBody = new URLSearchParams(
+          wifiOnRequest.body.urlencoded.map((field) => {
+            const value = encryptedValues[field.key.toLowerCase()];
+            if (value === undefined) {
+              throw new Error(
+                `Unsupported Wi-Fi configuration field "${field.key}".`,
+              );
+            }
+            return [field.key, value];
           }),
-        });
+        ).toString();
+        const wifiResponse =
+          Platform.OS === 'web'
+            ? await fetch(getProxyUrl('/wifi-config'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sid: activeSession.sid,
+                  enabled: enableGuestWifi,
+                  ...encryptedRequest,
+                }),
+              })
+            : await fetch(wifiOnRequest.url.raw, {
+                method: wifiOnRequest.method,
+                headers: {
+                  ...createRouterHeaders(
+                    wifiOnRequest.header,
+                    activeSession.sid,
+                  ),
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: wifiFormBody,
+                credentials: 'include',
+              });
         const responseText = await wifiResponse.text();
         let wifiPayload: unknown = responseText;
         try {
@@ -489,7 +562,6 @@ export default function App() {
         } catch {
           // Keep the raw response when the router does not return JSON.
         }
-        setGuestWifiResponse(redactSensitiveValues(wifiPayload));
         if (!wifiResponse.ok) {
           const errorMessage = findValueByKey(wifiPayload, 'error');
           throw new Error(
@@ -532,11 +604,6 @@ export default function App() {
           false,
           enableGuestWifi,
         );
-      } else {
-        setGuestWifiResponse({
-          status: 'login_failed',
-          message: 'Could not refresh the expired router session.',
-        });
       }
     }
   };
@@ -545,6 +612,10 @@ export default function App() {
     forceOn = false,
   ): Promise<LoginResponseCache | null> => {
     if (requestInProgressRef.current) {
+      return null;
+    }
+    if (Platform.OS !== 'web' && !routerPassword) {
+      setRequestError('Save the router password on this device before connecting.');
       return null;
     }
 
@@ -566,15 +637,6 @@ export default function App() {
     if (forceOn) {
       setSessionCache(null);
     }
-    setUserHash(null);
-    setNonceValue(null);
-    setPublicKey(null);
-    setRandomKeyHash(null);
-    setLoginResponse(null);
-    setLoginServerResponse(null);
-    setEncryptionKey(null);
-    setEncryptionIv(null);
-    setSessionCheckResponse(null);
     setRequestError(null);
     setIsRequestingNonce(true);
 
@@ -604,7 +666,7 @@ export default function App() {
 
       const requestUrl =
         Platform.OS === 'web'
-          ? 'http://127.0.0.1:3001/nonce'
+          ? getProxyUrl('/nonce')
           : nonceRequest.url.raw;
       const response = await fetch(requestUrl, {
         method: nonceRequest.method,
@@ -612,6 +674,7 @@ export default function App() {
         body: `${encodeURIComponent(usernameField.key)}=${encodeURIComponent(
           usernameField.value,
         )}`,
+        ...(Platform.OS === 'web' ? {} : { credentials: 'include' as const }),
       });
 
       if (!response.ok) {
@@ -631,30 +694,22 @@ export default function App() {
       }
       const nonce = nonceValueFromPayload;
       const publicKeyValue = findValueByKey(payload, 'pubkey');
-      if (typeof publicKeyValue === 'string' && publicKeyValue) {
-        setPublicKey(publicKeyValue);
-      }
       const randomKeyValue = findValueByKey(payload, 'randomKey');
       if (typeof randomKeyValue !== 'string' || !randomKeyValue) {
         throw new Error('Random key was not present in the router response.');
       }
       const randomKey = randomKeyValue;
-      setNonceValue(nonce);
 
       const userDigest = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         `${usernameField.value}:${nonce}`,
         { encoding: Crypto.CryptoEncoding.BASE64 },
       );
-      setUserHash(toRouterBase64Url(userDigest));
-
       const randomKeyDigest = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         `${randomKey}:${nonce}`,
         { encoding: Crypto.CryptoEncoding.BASE64 },
       );
-      setRandomKeyHash(toRouterBase64Url(randomKeyDigest));
-
       if (!saltRequest?.url.raw) {
         throw new Error('Salt request URL is missing.');
       }
@@ -704,12 +759,13 @@ export default function App() {
 
       const saltResponse = await fetch(
         Platform.OS === 'web'
-          ? 'http://127.0.0.1:3001/salt'
+          ? getProxyUrl('/salt')
           : saltRequest.url.raw,
         {
           method: saltRequest.method,
           headers: saltHeaders,
           body: saltBody,
+          ...(Platform.OS === 'web' ? {} : { credentials: 'include' as const }),
         },
       );
       if (!saltResponse.ok) {
@@ -748,49 +804,59 @@ export default function App() {
       if (!Number.isInteger(iterations) || iterations < 0) {
         throw new Error('A valid iteration count was not present in the nonce response.');
       }
-      if (Platform.OS !== 'web') {
-        throw new Error(
-          'The password-derived response is calculated by the local Chrome proxy.',
-        );
-      }
-
-      const responseResult = await fetch('http://127.0.0.1:3001/response', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ salt, nonce, iterations }),
-      });
       let responsePayload: unknown;
-      try {
-        responsePayload = await responseResult.json();
-      } catch {
-        throw new Error('The local proxy returned an invalid response.');
-      }
-      if (!responseResult.ok) {
-        const proxyError = findValueByKey(responsePayload, 'error');
-        throw new Error(
-          typeof proxyError === 'string'
-            ? proxyError
-            : `Response calculation failed (HTTP ${responseResult.status}).`,
+      let calculatedResponse: unknown;
+      let generatedEncryptionKey: unknown;
+      let generatedEncryptionIv: unknown;
+      if (Platform.OS === 'web') {
+        const responseResult = await fetch(getProxyUrl('/response'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ salt, nonce, iterations }),
+        });
+        try {
+          responsePayload = await responseResult.json();
+        } catch {
+          throw new Error('The local proxy returned an invalid response.');
+        }
+        if (!responseResult.ok) {
+          const proxyError = findValueByKey(responsePayload, 'error');
+          throw new Error(
+            typeof proxyError === 'string'
+              ? proxyError
+              : `Response calculation failed (HTTP ${responseResult.status}).`,
+          );
+        }
+        calculatedResponse = findValueByKey(responsePayload, 'response');
+        generatedEncryptionKey = findValueByKey(responsePayload, 'enckey');
+        generatedEncryptionIv = findValueByKey(responsePayload, 'enciv');
+      } else {
+        if (!routerPassword) {
+          throw new Error('Save the router password on this device before connecting.');
+        }
+        const cryptoValues = await createLoginCryptoValues(
+          usernameField.value,
+          routerPassword,
+          salt,
+          nonce,
+          iterations,
         );
+        responsePayload = cryptoValues;
+        calculatedResponse = cryptoValues.response;
+        generatedEncryptionKey = cryptoValues.enckey;
+        generatedEncryptionIv = cryptoValues.enciv;
       }
-      const calculatedResponse = findValueByKey(responsePayload, 'response');
       if (typeof calculatedResponse !== 'string' || !calculatedResponse) {
-        throw new Error('The local proxy did not return a login response.');
+        throw new Error('Could not calculate the router login response.');
       }
-      const generatedEncryptionKey = findValueByKey(responsePayload, 'enckey');
-      const generatedEncryptionIv = findValueByKey(responsePayload, 'enciv');
       if (
         typeof generatedEncryptionKey !== 'string' ||
         !generatedEncryptionKey ||
         typeof generatedEncryptionIv !== 'string' ||
         !generatedEncryptionIv
       ) {
-        throw new Error('The local proxy did not return the encryption key and IV.');
+        throw new Error('Could not generate the router login encryption key and IV.');
       }
-      setLoginResponse(calculatedResponse);
-      setEncryptionKey(generatedEncryptionKey);
-      setEncryptionIv(generatedEncryptionIv);
-
       if (!loginRequest?.url.raw || !loginRequest.body?.urlencoded) {
         throw new Error(
           'Login POST configuration is missing from postman-hash.json.',
@@ -821,7 +887,7 @@ export default function App() {
       const loginPayload = Object.fromEntries(loginBody);
       const loginPostResponse = await fetch(
         Platform.OS === 'web'
-          ? 'http://127.0.0.1:3001/login'
+          ? getProxyUrl('/login')
           : loginRequest.url.raw,
         {
           method: loginRequest.method,
@@ -845,6 +911,7 @@ export default function App() {
             Platform.OS === 'web'
               ? JSON.stringify(loginPayload)
               : new URLSearchParams(loginBody).toString(),
+          ...(Platform.OS === 'web' ? {} : { credentials: 'include' as const }),
         },
       );
       const loginResponseBody = await loginPostResponse.text();
@@ -870,7 +937,6 @@ export default function App() {
       const token =
         typeof tokenValue === 'string' && tokenValue ? tokenValue : null;
       const loginResponseText = JSON.stringify(loginResponseJson, null, 2);
-      setLoginServerResponse(loginResponseText);
       const newSessionCache: LoginResponseCache = {
         nonce: payload,
         salt: saltPayload,
@@ -900,7 +966,7 @@ export default function App() {
     } catch (error) {
       setRequestError(
         Platform.OS === 'web' && error instanceof TypeError
-          ? 'Cannot reach the local router proxy. Start it with "npm run proxy" and keep it running.'
+          ? getProxyErrorMessage()
           : error instanceof Error
             ? error.message
             : 'Could not request the router nonce.',
@@ -916,17 +982,91 @@ export default function App() {
     handleButtonPressRef.current = handleButtonPress;
   });
 
+  const saveRouterPassword = async () => {
+    const password = routerPasswordInput;
+    if (!password.trim()) {
+      setRequestError('Enter the router password to continue.');
+      return;
+    }
+
+    try {
+      await SecureStore.setItemAsync(routerPasswordStorageKey, password);
+      setRouterPassword(password);
+      setRouterPasswordInput('');
+      setRequestError(null);
+    } catch (error) {
+      setRequestError(
+        error instanceof Error
+          ? `Could not securely save the router password: ${error.message}`
+          : 'Could not securely save the router password.',
+      );
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (requestInProgressRef.current || guestWifiRequestInProgressRef.current) {
+      setRequestError('Please wait for the current router request to finish.');
+      return;
+    }
+    if (!sessionCache) {
+      setRequestError('The router session is not ready yet. Try again shortly.');
+      return;
+    }
+
+    setIsRefreshing(true);
+    setRequestError(null);
+    try {
+      await refreshGuestWifiStatus(sessionCache);
+    } catch (error) {
+      setRequestError(
+        error instanceof Error
+          ? error.message
+          : 'Could not refresh guest Wi-Fi status.',
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const changeRouterPassword = async () => {
+    try {
+      await SecureStore.deleteItemAsync(routerPasswordStorageKey);
+      setRouterPassword(null);
+      setSessionCache(null);
+      setIsOn(false);
+      setSwitchedOnAt(null);
+      startupLoginStartedRef.current = false;
+      setRequestError(null);
+    } catch (error) {
+      setRequestError(
+        error instanceof Error
+          ? `Could not remove the saved router password: ${error.message}`
+          : 'Could not remove the saved router password.',
+      );
+    }
+  };
+
   const validateCachedSession = async (cachedSession: LoginResponseCache | null) => {
-    if (Platform.OS !== 'web' || !cachedSession?.sid) {
+    if (!cachedSession?.sid || !checkExpireRequest?.url.raw) {
       return false;
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:3001/check-expire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sid: cachedSession.sid }),
-      });
+      const response =
+        Platform.OS === 'web'
+          ? await fetch(getProxyUrl('/check-expire'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sid: cachedSession.sid }),
+            })
+          : await fetch(checkExpireRequest.url.raw, {
+              method: checkExpireRequest.method,
+              headers: createRouterHeaders(
+                checkExpireRequest.header,
+                cachedSession.sid,
+              ),
+              credentials: 'include',
+            });
 
       let payload: unknown;
       try {
@@ -935,7 +1075,6 @@ export default function App() {
         throw new Error('The router returned an invalid session-check JSON response.');
       }
 
-      setSessionCheckResponse(redactSensitiveValues(payload));
       if (!response.ok) {
         const errorMessage = findValueByKey(payload, 'error');
         throw new Error(
@@ -979,7 +1118,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || startupLoginStartedRef.current) {
+    if (startupLoginStartedRef.current) {
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      if (!isRouterPasswordLoaded || !routerPassword) {
+        return;
+      }
+      startupLoginStartedRef.current = true;
+      void handleButtonPressRef.current(true);
       return;
     }
 
@@ -1007,7 +1155,7 @@ export default function App() {
     }
 
     void handleButtonPressRef.current(true);
-  }, [sessionCache]);
+  }, [isRouterPasswordLoaded, routerPassword, sessionCache]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof localStorage === 'undefined') {
@@ -1022,7 +1170,7 @@ export default function App() {
 
   useEffect(() => {
     const sid = sessionCache?.sid;
-    if (!sid || Platform.OS !== 'web') {
+    if (!sid || !checkExpireRequest?.url.raw) {
       return;
     }
 
@@ -1049,18 +1197,27 @@ export default function App() {
       let shouldLogInAgain = false;
       let nextCheckDelayMs: number | null = null;
       try {
-        const response = await fetch('http://127.0.0.1:3001/check-expire', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sid }),
-        });
+        const response =
+          Platform.OS === 'web'
+            ? await fetch(getProxyUrl('/check-expire'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sid }),
+              })
+            : await fetch(checkExpireRequest.url.raw, {
+                method: checkExpireRequest.method,
+                headers: createRouterHeaders(
+                  checkExpireRequest.header,
+                  sid,
+                ),
+                credentials: 'include',
+              });
         let payload: unknown;
         try {
           payload = await response.json();
         } catch {
           throw new Error('The router returned an invalid session-check JSON response.');
         }
-        setSessionCheckResponse(redactSensitiveValues(payload));
         if (!response.ok) {
           const errorMessage = findValueByKey(payload, 'error');
           throw new Error(
@@ -1160,10 +1317,46 @@ export default function App() {
   return (
     <ScrollView
       contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator
+      refreshControl={
+        Platform.OS === 'android' ? (
+          <RefreshControl
+            colors={['#78F0C0']}
+            onRefresh={() => void handleRefresh()}
+            progressBackgroundColor="#171E2E"
+            refreshing={isRefreshing}
+          />
+        ) : undefined
+      }
+      showsVerticalScrollIndicator={false}
+      onScroll={(event) => {
+        scrollOffsetY.current = event.nativeEvent.contentOffset.y;
+      }}
+      onTouchStart={(event) => {
+        if (Platform.OS === 'web' && scrollOffsetY.current <= 0) {
+          pullStartY.current = event.nativeEvent.pageY;
+        }
+      }}
+      onTouchEnd={(event) => {
+        const startY = pullStartY.current;
+        pullStartY.current = null;
+        if (
+          Platform.OS === 'web' &&
+          startY !== null &&
+          scrollOffsetY.current <= 0 &&
+          event.nativeEvent.pageY - startY >= 64
+        ) {
+          void handleRefresh();
+        }
+      }}
+      onTouchCancel={() => {
+        pullStartY.current = null;
+      }}
     >
       <StatusBar style="light" />
       <View style={styles.content}>
+        {Platform.OS === 'web' && isRefreshing && (
+          <Text style={styles.credentialMessage}>Refreshing Wi-Fi status...</Text>
+        )}
         <Text style={styles.title}>
           {isOn ? 'Disable' : 'Enable'} NOKIA-45AA_Guest wifi
         </Text>
@@ -1171,6 +1364,44 @@ export default function App() {
           Switching ON enables the NOKIA-45AA_Guest SSID on its matching Wi-Fi
           bands. Switching OFF disables those matching guest network entries.
         </Text>
+
+        {Platform.OS !== 'web' && !isRouterPasswordLoaded && (
+          <Text style={styles.credentialMessage}>
+            Loading saved router access...
+          </Text>
+        )}
+        {Platform.OS !== 'web' &&
+          isRouterPasswordLoaded &&
+          !routerPassword && (
+            <View style={styles.credentialSetup}>
+              <Text style={styles.credentialTitle}>Connect to your router</Text>
+              <Text style={styles.credentialMessage}>
+                Enter the router password once. It will be stored securely on
+                this Android device.
+              </Text>
+              <TextInput
+                accessibilityLabel="Router password"
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={setRouterPasswordInput}
+                onSubmitEditing={() => void saveRouterPassword()}
+                placeholder="Router password"
+                placeholderTextColor="#7E879A"
+                secureTextEntry
+                style={styles.credentialInput}
+                value={routerPasswordInput}
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void saveRouterPassword()}
+                style={styles.credentialButton}
+              >
+                <Text style={styles.credentialButtonLabel}>
+                  Save securely and connect
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
         <View style={styles.buttonWrap}>
           {isButtonBusy && (
@@ -1187,7 +1418,9 @@ export default function App() {
             accessibilityRole="button"
             accessibilityLabel={`Turn ${isOn ? 'off' : 'on'}`}
             accessibilityState={{ checked: isOn, busy: isButtonBusy }}
-            disabled={isButtonBusy}
+            disabled={
+              isButtonBusy || (Platform.OS !== 'web' && !routerPassword)
+            }
             onPress={() => void handleButtonPress()}
             style={({ pressed }) => [
               styles.button,
@@ -1202,6 +1435,17 @@ export default function App() {
             </View>
           </Pressable>
         </View>
+        {Platform.OS !== 'web' && routerPassword && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void changeRouterPassword()}
+            style={styles.changePasswordButton}
+          >
+            <Text style={styles.changePasswordLabel}>
+              Change saved router password
+            </Text>
+          </Pressable>
+        )}
 
         <View style={styles.status}>
           <View style={[styles.statusDot, isOn && styles.statusDotOn]} />
@@ -1209,6 +1453,12 @@ export default function App() {
             {isOn ? 'IT’S ON' : 'IT’S OFF'}
           </Text>
         </View>
+
+        {requestError !== null && (
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {requestError}
+          </Text>
+        )}
 
         <View style={styles.details}>
           <View style={styles.detailRow}>
@@ -1228,115 +1478,6 @@ export default function App() {
               {isOn ? formattedDuration : '--'}
             </Text>
           </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>User hash</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce ? 'Fetching nonce...' : (userHash ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Nonce</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce ? 'Fetching nonce...' : (nonceValue ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Cached router public key</Text>
-            <Text selectable style={styles.responseValue}>
-              {isRequestingNonce
-                ? 'Fetching nonce...'
-                : (publicKey ?? 'Not returned by the nonce response.')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>RandomKeyhash</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce
-                ? 'Calculating hash...'
-                : (randomKeyHash ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Response</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce
-                ? 'Calculating response...'
-                : (loginResponse ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>enckey</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce
-                ? 'Generating...'
-                : (encryptionKey ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>enciv</Text>
-            <Text selectable style={styles.hashValue}>
-              {isRequestingNonce
-                ? 'Generating...'
-                : (encryptionIv ?? '--')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Login request response JSON</Text>
-            <Text selectable style={styles.responseValue}>
-              {isRequestingNonce
-                ? 'Waiting for login response...'
-                : (loginServerResponse ?? 'No response yet.')}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Session check response JSON</Text>
-            <Text selectable style={styles.responseValue}>
-              {sessionCheckResponse === null
-                ? 'Waiting for session check...'
-                : JSON.stringify(sessionCheckResponse, null, 2)}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Guest Wi-Fi settings JSON (PreSharedKey visible)</Text>
-            <Text selectable style={styles.responseValue}>
-              {isSendingGuestWifi
-                ? 'Checking session and fetching current settings...'
-                : guestWifiSettings === null
-                  ? 'No guest Wi-Fi settings fetched yet.'
-                  : JSON.stringify(guestWifiSettings, null, 2)}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Guest Wi-Fi status JSON (PreSharedKey visible)</Text>
-            <Text selectable style={styles.responseValue}>
-                  {guestWifiStatusResponse === null
-                    ? 'Guest Wi-Fi status has not been checked yet.'
-                    : JSON.stringify(guestWifiStatusResponse, null, 2)}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Generated encrypted request</Text>
-            <Text selectable style={styles.responseValue}>
-              {guestWifiEncryptedRequest === null
-                ? 'No request generated yet.'
-                : JSON.stringify(guestWifiEncryptedRequest, null, 2)}
-            </Text>
-          </View>
-          <View style={styles.hashRow}>
-            <Text style={styles.detailLabel}>Guest Wi-Fi request response</Text>
-            <Text selectable style={styles.responseValue}>
-              {guestWifiResponse === null
-                ? 'No guest Wi-Fi request sent yet.'
-                : typeof guestWifiResponse === 'string'
-                  ? guestWifiResponse
-                  : JSON.stringify(guestWifiResponse, null, 2)}
-            </Text>
-          </View>
-          {requestError !== null && (
-            <Text accessibilityRole="alert" style={styles.errorText}>
-              {requestError}
-            </Text>
-          )}
         </View>
       </View>
     </ScrollView>
@@ -1372,6 +1513,56 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 30,
     textAlign: 'center',
+  },
+  credentialSetup: {
+    width: '100%',
+    marginBottom: 28,
+    padding: 18,
+    borderRadius: 16,
+    backgroundColor: '#171E2E',
+  },
+  credentialTitle: {
+    color: '#F5F7FC',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  credentialMessage: {
+    color: '#A7AEC0',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  credentialInput: {
+    minHeight: 48,
+    marginTop: 16,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#394255',
+    borderRadius: 10,
+    color: '#F5F7FC',
+    fontSize: 16,
+  },
+  credentialButton: {
+    minHeight: 48,
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: '#086CFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  credentialButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  changePasswordButton: {
+    paddingVertical: 12,
+  },
+  changePasswordLabel: {
+    color: '#91B9FF',
+    fontSize: 14,
   },
   buttonWrap: {
     width: 248,
@@ -1479,25 +1670,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
-  },
-  hashRow: {
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#30394C',
-  },
-  hashValue: {
-    color: '#F5F7FC',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-  },
-  responseValue: {
-    color: '#F5F7FC',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 8,
-    width: '100%',
   },
   errorText: {
     color: '#FF9B9B',

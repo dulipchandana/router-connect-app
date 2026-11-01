@@ -7,6 +7,12 @@ export interface EncryptedGuestRequest {
   ck: string;
 }
 
+export interface LoginCryptoValues {
+  response: string;
+  enckey: string;
+  enciv: string;
+}
+
 function bytesToBinaryString(bytes: Uint8Array): string {
   return String.fromCharCode(...bytes);
 }
@@ -15,8 +21,59 @@ function toRouterBase64Url(value: string): string {
   return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '.');
 }
 
+function hashBase64(value: string): string {
+  const digest = forge.md.sha256.create();
+  digest.update(value, 'utf8');
+  return forge.util.encode64(digest.digest().getBytes());
+}
+
+function hashHex(value: string, encoding: 'raw' | 'utf8'): string {
+  const digest = forge.md.sha256.create();
+  digest.update(value, encoding);
+  return digest.digest().toHex();
+}
+
 function toBase64UrlWithoutPadding(value: string): string {
   return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+export async function createLoginCryptoValues(
+  username: string,
+  password: string,
+  salt: string,
+  nonce: string,
+  iterations: number,
+): Promise<LoginCryptoValues> {
+  if (!Number.isInteger(iterations) || iterations < 0 || iterations > 10000) {
+    throw new Error('The router returned an invalid login iteration count.');
+  }
+
+  let passwordHash: string;
+  if (iterations >= 1) {
+    passwordHash = hashHex(`${salt}${password}`, 'utf8');
+    for (let index = 1; index < iterations; index += 1) {
+      passwordHash = hashHex(forge.util.hexToBytes(passwordHash), 'raw');
+    }
+  } else {
+    passwordHash = `${salt}${password}`;
+  }
+
+  const z = hashBase64(`${username}:${passwordHash.toLowerCase()}`);
+  const response = toRouterBase64Url(hashBase64(`${z}:${nonce}`));
+  const encryptionKey = await AESEncryptionKey.generate(128);
+  const encryptionIv = await AESEncryptionKey.generate(128);
+  const encryptionKeyBytes = await encryptionKey.bytes();
+  const encryptionIvBytes = await encryptionIv.bytes();
+
+  return {
+    response,
+    enckey: toRouterBase64Url(
+      forge.util.encode64(bytesToBinaryString(encryptionKeyBytes)),
+    ),
+    enciv: toRouterBase64Url(
+      forge.util.encode64(bytesToBinaryString(encryptionIvBytes)),
+    ),
+  };
 }
 
 function createRouterPublicKey(publicKeyValue: string): forge.pki.rsa.PublicKey {

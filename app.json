@@ -3,6 +3,10 @@
     "name": "One Button",
     "slug": "router-connect-app",
     "version": "1.0.0",
+    "platforms": [
+      "android",
+      "web"
+    ],
     "orientation": "portrait",
     "icon": "./assets/wifi-app-icon.png",
     "userInterfaceStyle": "dark",
@@ -19,6 +23,10 @@
     },
     "web": {
       "favicon": "./assets/wifi-app-icon.png"
-    }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "./plugins/with-router-cleartext"
+    ]
   }
 }
