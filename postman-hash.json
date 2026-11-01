@@ -1,0 +1,1357 @@
+{
+  "info": {
+    "_postman_id": "7d95babc-6d8d-4e83-9c13-82f08752a190",
+    "name": "Router Web App API (from cURL capture)",
+    "description": "Requests converted from the provided cURL commands. Sensitive session/cookie/token values were retained from the source capture; replace them with fresh values before use. This collection is intended for authorized access to your own router.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "router_host",
+      "value": "192.168.1.1",
+      "type": "string"
+    },
+    {
+      "key": "base_url",
+      "value": "http://{{router_host}}",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "login_web_app.cgi?nonce",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/login_web_app.cgi?nonce",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "login_web_app.cgi"
+          ],
+          "query": [
+            {
+              "key": "nonce",
+              "value": "",
+              "disabled": false
+            }
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use.",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "userName",
+              "value": "admin",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "login_web_app.cgi?salt",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/login_web_app.cgi?salt",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "login_web_app.cgi"
+          ],
+          "query": [
+            {
+              "key": "salt",
+              "value": "",
+              "disabled": false
+            }
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use.",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "userhash",
+              "value": "Jdoc-6gm87stzqIa0SKJ-qR8bt7cSSebRM1OGFwHSVM.",
+              "type": "text"
+            },
+            {
+              "key": "nonce",
+              "value": "HCw444EIB2gLD-TSDBJCfw5zc-RkYZxAvJKr_YGAsMg.",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "main_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/main_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "main_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "login_web_app.cgi",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/login_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "login_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use.",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "userhash",
+              "value": "Jdoc-6gm87stzqIa0SKJ-qR8bt7cSSebRM1OGFwHSVM.",
+              "type": "text"
+            },
+            {
+              "key": "RandomKeyhash",
+              "value": "_7n2zdEMe8XJmBW8T_smsRZGEHm87Fd07o2WJXq4U84.",
+              "type": "text"
+            },
+            {
+              "key": "response",
+              "value": "WBn4JaK4ku9ALhYFb9St-HeYizm_mw0JupFb_DA9lGk.",
+              "type": "text"
+            },
+            {
+              "key": "nonce",
+              "value": "HCw444EIB2gLD-TSDBJCfw5zc-RkYZxAvJKr_YGAsMg.",
+              "type": "text"
+            },
+            {
+              "key": "enckey",
+              "value": "3s1kb4PlWruLuQw9gzRoog..",
+              "type": "text"
+            },
+            {
+              "key": "enciv",
+              "value": "r5HvXepGn85Sl8ZZffzcjQ..",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "capabilities_status_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/capabilities_status_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "capabilities_status_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "775.9c0a13b99d073682.js",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "*/*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_whw/775.9c0a13b99d073682.js",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_whw",
+            "775.9c0a13b99d073682.js"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "560.02fcaa662b8f96cc.js",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "*/*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_whw/560.02fcaa662b8f96cc.js",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_whw",
+            "560.02fcaa662b8f96cc.js"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "speed_test_tr143_status_web_app.cgi?v=diagnostic_status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/speed_test_tr143_status_web_app.cgi?v=diagnostic_status",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "speed_test_tr143_status_web_app.cgi"
+          ],
+          "query": [
+            {
+              "key": "v",
+              "value": "diagnostic_status",
+              "disabled": false
+            }
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "en.json",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_whw/assets/i18n/en.json",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_whw",
+            "assets",
+            "i18n",
+            "en.json"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "wan_config_glb_status_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/wan_config_glb_status_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "wan_config_glb_status_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "en.json",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_whw/assets/i18n/en.json",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_whw",
+            "assets",
+            "i18n",
+            "en.json"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "service_function_web_app.cgi",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Origin",
+            "value": "http://192.168.1.1",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/service_function_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "service_function_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\":1,\"csrf_token\":\"NhTWkIvLYoRdBOMo\",\"id\":1,\"interface\":\"Nokia.GenericService\",\"service\":\"OAM\",\"function\":\"GetTrafficForwardingStatus\",\"paralist\":[]}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "web_customization_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_customization_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_customization_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "container_management_status_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/container_management_status_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "container_management_status_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "en.json",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/web_whw/assets/i18n/en.json",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "web_whw",
+            "assets",
+            "i18n",
+            "en.json"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "dashboard_status_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/dashboard_status_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "dashboard_status_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "overview_get_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/overview_get_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "overview_get_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "overview_get_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/overview_get_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "overview_get_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "overview_get_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/overview_get_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "overview_get_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "overview_status_web_app.cgi?nocache",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/overview_status_web_app.cgi?nocache",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "overview_status_web_app.cgi"
+          ],
+          "query": [
+            {
+              "key": "nocache",
+              "value": "",
+              "disabled": false
+            }
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "check_expire_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/check_expire_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "check_expire_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "check_expire_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/check_expire_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "check_expire_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    },
+    {
+      "name": "check_expire_web_app.cgi",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json, text/plain, */*",
+            "type": "text"
+          },
+          {
+            "key": "Accept-Language",
+            "value": "en-US,en;q=0.9",
+            "type": "text"
+          },
+          {
+            "key": "Connection",
+            "value": "keep-alive",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "type": "text"
+          },
+          {
+            "key": "Referer",
+            "value": "http://192.168.1.1/",
+            "type": "text"
+          },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "type": "text"
+          },
+          {
+            "key": "Cookie",
+            "value": "sid=RQjJttuEaibhpxlp",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/check_expire_web_app.cgi",
+          "host": [
+            "{{router_host}}"
+          ],
+          "path": [
+            "check_expire_web_app.cgi"
+          ]
+        },
+        "description": "Converted from the supplied cURL capture. Review authentication/session values before use."
+      },
+      "response": []
+    }
+  ]
+}

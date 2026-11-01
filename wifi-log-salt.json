@@ -1,0 +1,52 @@
+{
+  "info": {
+    "name": "Router Login - Salt",
+    "description": "Converted from the provided cURL request",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Login Salt",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json, text/plain, /" },
+          { "key": "Accept-Language", "value": "en-US,en;q=0.9" },
+          { "key": "Connection", "value": "keep-alive" },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          },
+          { "key": "Origin", "value": "http://192.168.1.1" },
+          { "key": "Referer", "value": "http://192.168.1.1/" },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+          }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/login_web_app.cgi?salt",
+          "protocol": "http",
+          "host": ["192", "168", "1", "1"],
+          "path": ["login_web_app.cgi"],
+          "query": [{ "key": "salt", "value": null }]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "userhash",
+              "value": "CvnDjI4ur5HkC6tqG6BW6Ugq6QW_m-ym0LRFdkoPZQ0.",
+              "type": "text"
+            },
+            {
+              "key": "nonce",
+              "value": "6rw7t3YCyA03wN67fulZxarxlfXrrHMB_7SyX3kbejE.",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

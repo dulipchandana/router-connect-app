@@ -1,0 +1,54 @@
+{
+  "info": {
+    "name": "Guest WiFi Configuration",
+    "description": "Imported from the provided cURL request",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "ConfigWhwGuest",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json, text/plain, /" },
+          { "key": "Accept-Language", "value": "en-US,en;q=0.9" },
+          { "key": "Connection", "value": "keep-alive" },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          },
+          { "key": "Origin", "value": "http://192.168.1.1" },
+          { "key": "Referer", "value": "http://192.168.1.1/" },
+          {
+            "key": "User-Agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+          },
+          { "key": "Cookie", "value": "sid=kDSmeZGeIqkYvZTY" }
+        ],
+        "url": {
+          "raw": "http://192.168.1.1/wlan_config_guest_web_app.cgi?ConfigWhwGuest",
+          "protocol": "http",
+          "host": ["192", "168", "1", "1"],
+          "path": ["wlan_config_guest_web_app.cgi"],
+          "query": [{ "key": "ConfigWhwGuest", "value": null }]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "encrypted", "value": "1", "type": "text" },
+            {
+              "key": "ct",
+              "value": "SCq2wbDJuhJp6D6tQ1n4_I6o_qDIIuJzDuF4BNzUDJcf-iW5Y_yW_cxPh-9AMh5QHt5vid4cSq0zGD_vVnEhT6UlPwdwPzHPfkUxS-MxMb9BA5kZKXUACq2e6M2eBECu7LbMgCBY-BlB3aMqPRIG6Bwa6FF8fYauNSsXunkK1XfVKADsKRAHThZCvIN0XcwgC7pMEkQZBZFmB1FHrEy77q3bAImkFJQkA5F64FlJBW1OUEt8cCxAghltVOammnKX",
+              "type": "text"
+            },
+            {
+              "key": "ck",
+              "value": "EU9cyPpaEOvApNd-92yTIsixeaTCX6BHFvHGvBsOExJ2xBUO2PYkr_nRTjUKM_WlN85QAUiGSx_WwdbjW23k9oMf2kWSvA4JpQWV-Gig_ncJ-rJbkMK2dKdI8mpW9-KOeYyTRcILkN7zk7IaQoYcCkJJexPfqzWFJ_aMheoUeIE.",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
